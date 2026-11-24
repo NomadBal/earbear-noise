@@ -1185,6 +1185,7 @@ class App:
         self.wind_on, self.wind, self.timer_len, self.te_seen = False, 1.0, 0.0, None   # sleep wind-down
         self.hotkey, self.hk_tid, self.hk_thread = 'N', None, None                     # global play/pause hotkey
         self.x11_hotkey = None
+        self.window_mapped, self.window_maps = False, 0
         self.audio_ready = False
         self.linux_session = None
         self.launch = launch
@@ -1219,6 +1220,9 @@ class App:
         LOG.info('EarBear %s starting' % VERSION)
 
         self.root = tk.Tk(className='EarBear') if LINUX else tk.Tk()
+        if LINUX and linux_desktop.sway_socket():
+            self.root.bind('<Map>', lambda e: self.sway_window_map(e, True))
+            self.root.bind('<Unmap>', lambda e: self.sway_window_map(e, False))
         self.root.title('EarBear')
         self.root.configure(bg=BG)
         self.root.resizable(False, False)
@@ -1428,6 +1432,11 @@ class App:
             cv.create_text(cx, y, text=self.status, fill=FG, font=self.f_small, tags='vol')
 
     # ---------- background services ----------
+    def sway_window_map(self, event, mapped):
+        if event.widget is self.root:
+            self.window_mapped = mapped
+            self.window_maps += 1
+
     def start_services(self):
         if LINUX:
             self.linux_session = linux_session.start(self, LOG)
@@ -3231,8 +3240,10 @@ class App:
         y = self.row(y, 'volume down for videos and music', onoff, self.duck, lambda v: self.set_attr('duck', v))
         y = self.row(y, 'keep awake', [('Off', 0), ('System', 1), ('Screen', 2)], self.keep_awake, lambda v: self.set_attr('keep_awake', v))
         y = self.row(y, 'sleep fade-out', onoff, self.wind_on, lambda v: self.set_attr('wind_on', v))
-        if LINUX and not linux_desktop.x11_session():
-            self.c.create_text(self.bx, y + self.px(8), text='Wayland shortcut: bind EarBear --toggle in your desktop',
+        if LINUX and linux_desktop.wayland_session():
+            shortcut = ('Sway: bind Ctrl+Alt+N to EarBear --toggle' if linux_desktop.sway_socket()
+                        else 'Wayland: bind EarBear --toggle in your desktop')
+            self.c.create_text(self.bx, y + self.px(8), text=shortcut,
                                fill=DIM, font=self.f_small, anchor='w')
             return y + self.px(24)
         return self.row(y, 'play/pause Ctrl+Alt+', [('Off', ''), ('N', 'N'), ('P', 'P'), ('Space', 'SPACE')], self.hotkey, self.set_hotkey)
@@ -3676,6 +3687,9 @@ def main():
         if listener is None:
             return
         with listener:
+            if linux_desktop.wayland_session() and not os.environ.get('DISPLAY'):
+                print('EarBear: Tk needs XWayland to open its window. Enable XWayland in your compositor.', file=sys.stderr)
+                return 1
             try:
                 App(listener, launch)
             except Exception:

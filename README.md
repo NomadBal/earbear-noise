@@ -36,9 +36,9 @@ Run `./EarBear-debug.sh` to see startup errors in the terminal. To remove EarBea
 in Settings → Window if enabled, run `./EarBear-stop-all.sh`, then delete the folder.
 Settings live in `${XDG_CONFIG_HOME:-~/.config}/earbear`; the log lives in `${XDG_STATE_HOME:-~/.local/state}/earbear`.
 
-- On X11, Ctrl+Alt+N toggles playback by default. On Wayland (with XWayland for the Tk window), set a desktop shortcut to `EarBear --toggle` using the absolute path to `EarBear`. Media controls use MPRIS on both.
+- On X11, Ctrl+Alt+N toggles playback by default. On Wayland, the Tk window requires XWayland. Set the global shortcut in your compositor using the absolute path to `EarBear`. On Sway, add `bindsym --no-repeat Ctrl+Alt+n exec "/path/to/EarBear" --toggle` to your Sway config. Media controls use MPRIS on both.
 - **Close to tray** requires a StatusNotifier/AppIndicator tray and GTK 3 introspection. On Debian/Ubuntu install `python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3 libglib2.0-bin`. Without a tray, closing the window quits; `--hidden` starts minimized.
-- **Keep awake** uses logind for system sleep and the desktop's ScreenSaver D-Bus service for display idle. Without those services or permissions, playback still works.
+- **Keep awake** uses logind for system sleep. For display idle it uses Sway's idle inhibitor while the window is mapped, or the desktop's ScreenSaver D-Bus service on other desktops. Without those services or permissions, playback still works.
 
 ## Windows portable version
 

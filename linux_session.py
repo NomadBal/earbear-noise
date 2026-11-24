@@ -9,6 +9,7 @@ from dbus_next.aio import MessageBus
 from dbus_next.constants import PropertyAccess as Access
 from dbus_next.service import ServiceInterface, dbus_property, method
 
+from linux_desktop import sway_inhibit_idle, sway_socket
 
 PATH = '/org/mpris/MediaPlayer2'
 NAME = 'org.mpris.MediaPlayer2.EarBear'
@@ -137,6 +138,8 @@ async def session(app, log):
     player, media_root = Player(app), MediaRoot(app)
     published, previous, awake, system, fd, cookie = False, {}, 0, None, None, None
     screen = ('org.freedesktop.ScreenSaver', '/ScreenSaver', 'org.freedesktop.ScreenSaver')
+    sway = sway_socket()
+    sway_state = (0, False)
     try:
         while app.alive:
             if app.media != published:
@@ -174,13 +177,23 @@ async def session(app, log):
                     os.close(fd)
                     fd = None
                 try:
-                    if want >= 2 and cookie is None:
+                    if not sway and want >= 2 and cookie is None:
                         cookie = (await call(bus, *screen, 'Inhibit', 'ss', ['EarBear', 'Playing ambient noise'])).body[0]
                     elif want < 2 and cookie is not None:
                         await call(bus, *screen, 'UnInhibit', 'u', [cookie])
                         cookie = None
                 except Exception as exc:
                     log.dbg('screen idle inhibitor: %s' % exc)
+            if sway:
+                # Sway drops a withdrawn view's inhibitor. Apply it again when the window maps.
+                desired = (app.window_maps, want >= 2)
+                if app.window_mapped and desired != sway_state:
+                    try:
+                        if not (desired[1] or sway_state[1]) or await asyncio.to_thread(sway_inhibit_idle, sway, desired[1]):
+                            sway_state = desired
+                    except (OSError, ValueError) as exc:
+                        log.dbg('Sway idle inhibitor: %s' % exc)
+                        sway_state = desired
             await asyncio.sleep(0.15)
     finally:
         if cookie is not None:

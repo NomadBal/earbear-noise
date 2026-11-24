@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Linux autostart, launch activation and X11 shortcuts."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import socket
@@ -86,9 +87,29 @@ def read_command(listener):
     return None
 
 
+def wayland_session():
+    return bool(os.environ.get('WAYLAND_DISPLAY') or os.environ.get('XDG_SESSION_TYPE') == 'wayland')
+
+
 def x11_session():
-    return bool(os.environ.get('DISPLAY') and not os.environ.get('WAYLAND_DISPLAY') and
-                os.environ.get('XDG_SESSION_TYPE') != 'wayland')
+    return bool(os.environ.get('DISPLAY') and not wayland_session())
+
+
+def sway_socket():
+    return os.environ.get('SWAYSOCK') if wayland_session() else None
+
+
+def sway_inhibit_idle(sock, enabled):
+    """Apply the inhibitor to EarBear's view rather than the focused window."""
+    mode = 'open' if enabled else 'none'
+    try:
+        result = subprocess.run(['swaymsg', '-s', sock, '-r', '--',
+                                 f'[pid={os.getpid()} class="(?i)^earbear$"] inhibit_idle {mode}'],
+                                capture_output=True, text=True, timeout=1)
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError('Sway did not respond to the idle inhibitor request') from exc
+    replies = json.loads(result.stdout) if result.stdout else []
+    return not result.returncode and bool(replies) and all(reply.get('success') for reply in replies)
 
 
 class Hotkey:
