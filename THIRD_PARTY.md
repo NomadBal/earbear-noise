@@ -20,3 +20,6 @@ numpy's OpenBLAS library is not shipped: it is replaced by minblas (`minblas/`),
 
 The license files shipped inside each package stay in the bundle next to the component. LGPL components are used
 unmodified as separate libraries.
+
+The Linux installation uses the system's PulseAudio client libraries (LGPL-2.1-or-later) and installs
+pulsectl (MIT), dbus-next (MIT), and python-xlib (LGPL-2.1-or-later) for desktop integration.

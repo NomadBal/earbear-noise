@@ -1,0 +1,11 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+cd "$(dirname -- "$0")"
+if [ ! -x python/bin/python ]; then
+    printf '%s\n' 'EarBear: python/bin/python is missing. See the Linux setup in README.md.' >&2
+    exit 1
+fi
+unset PYTHONHOME PYTHONPATH
+export PYTHONNOUSERSITE=1
+exec ./python/bin/python earbear.py "$@"

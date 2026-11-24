@@ -1,5 +1,7 @@
 # Building the portable version
 
+This guide covers the Windows portable bundle. For the Linux launcher and its local Python runtime, see [the README](../README.md#run-on-linux).
+
 The portable folder has this layout:
 
 ```
