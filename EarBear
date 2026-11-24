@@ -1,0 +1,22 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+cd "$(dirname -- "$0")"
+if [ ! -x python/bin/python ]; then
+    printf '%s\n' 'EarBear: python/bin/python is missing. Unpack the entire Linux portable ZIP.' >&2
+    exit 1
+fi
+runtime="$PWD/python"
+unset PYTHONPATH PYTHONUSERBASE PYTHONPLATLIBDIR
+export PYTHONHOME="$runtime"
+# Skip site.py so distro-specific host site directories cannot leak into the bundle.
+for packages in "$runtime"/lib*/python*/site-packages; do
+    PYTHONPATH="$packages"
+done
+export PYTHONPATH
+export LD_LIBRARY_PATH="$runtime/lib"
+export PATH="$runtime/bin:$PATH"
+export TCL_LIBRARY="$runtime/share/tcl" TK_LIBRARY="$runtime/share/tk"
+export GI_TYPELIB_PATH="$runtime/lib/girepository-1.0"
+export GSETTINGS_SCHEMA_DIR="$runtime/share/glib-2.0/schemas"
+exec ./python/bin/python -S earbear.py "$@"

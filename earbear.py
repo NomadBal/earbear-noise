@@ -5,7 +5,7 @@
 """EarBear - local ambient noise generator.
 
 A 10-band spectral noise engine with optional binaural, wave-swell and rhythm layers.
-Runtime dependencies: numpy and tkinter; sounddevice (audio output), pystray and Pillow (tray icon).
+Runtime dependencies and desktop setup are documented in README.md.
 """
 try:
     import base64, ctypes, io, json, math, os, queue, random, re, struct, subprocess, sys, threading, time, traceback, wave, zlib
@@ -14,8 +14,16 @@ try:
     import tkinter as tk
     from tkinter import filedialog, font as tkfont
     import numpy as np
+    if sys.platform.startswith('linux'):
+        import linux_audio, linux_desktop, linux_session
 except Exception:               # a module missing from the bundle must never make the program vanish without a word
     import traceback as _tb
+    import sys as _sys
+    if _sys.platform.startswith('linux'):
+        _tb.print_exc()
+        print('EarBear cannot start. Install the Linux dependencies in README.md and run ./EarBear.',
+              file=_sys.stderr)
+        raise SystemExit(1)
     try:
         import ctypes as _ct
         _ct.windll.user32.MessageBoxW(0, 'EarBear cannot start:\n\n' + _tb.format_exc()[-900:], 'EarBear', 0x10)
@@ -24,6 +32,7 @@ except Exception:               # a module missing from the bundle must never ma
     raise SystemExit(1)
 
 VERSION = '0.14.2.0'
+LINUX = sys.platform.startswith('linux')
 F = [32, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]   # band centre frequencies (Hz)
 LF = np.log2(F)
 MIN, OFF = -60.0, -90.0          # slider floor; MIN means "band off" (OFF dB internally)
@@ -229,8 +238,11 @@ def boxcar(x, k, mode='valid'):
 
 
 def data_dir():
-    base = os.environ.get('LOCALAPPDATA')
-    d = Path(base) / 'EarBear' if base else Path.home() / '.earbear'
+    if LINUX:
+        d = linux_desktop.xdg('XDG_CONFIG_HOME', '.config') / 'earbear'
+    else:
+        base = os.environ.get('LOCALAPPDATA')
+        d = Path(base) / 'EarBear' if base else Path.home() / '.earbear'
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -239,7 +251,9 @@ class Log:
     """Small append-only file logger with a size cap."""
 
     def __init__(self):
-        self.path = data_dir() / 'earbear.log'
+        state = linux_desktop.xdg('XDG_STATE_HOME', '.local/state') / 'earbear' if LINUX else data_dir()
+        state.mkdir(parents=True, exist_ok=True)
+        self.path = state / 'earbear.log'
         self.debug = False
         self.lock = threading.Lock()
         try:
@@ -1152,7 +1166,7 @@ class App:
     W = 860
     VERSION = VERSION
 
-    def __init__(self):
+    def __init__(self, listener=None, launch='show'):
         self.db, self.vol, self.width = list(DEFAULT_DB), 0.35, 1.0
         self.anim = dict(on=False, pattern='random', depth=8, count=2, speed=1.0, down=True, up=False)
         self.user, self.cur_preset = {}, None
@@ -1170,6 +1184,11 @@ class App:
         self.cfg_dirty, self.cfg_t, self.exporting, self.anim_imgs = False, time.monotonic(), False, []
         self.wind_on, self.wind, self.timer_len, self.te_seen = False, 1.0, 0.0, None   # sleep wind-down
         self.hotkey, self.hk_tid, self.hk_thread = 'N', None, None                     # global play/pause hotkey
+        self.x11_hotkey = None
+        self.window_mapped, self.window_maps = False, 0
+        self.audio_ready = False
+        self.linux_session = None
+        self.launch = launch
         self.tray_pref, self.fade, self.media, self.keep_awake = False, True, True, 2
         self.cycle, self.cycle_every, self.debug = False, 120, False
         self.theme, self.cue_every, self.export_min, self.export_fmt = 'dark', 30, 10, 'wav'
@@ -1200,7 +1219,10 @@ class App:
         self.last, self.t_start = time.monotonic(), time.monotonic()
         LOG.info('EarBear %s starting' % VERSION)
 
-        self.root = tk.Tk()
+        self.root = tk.Tk(className='EarBear') if LINUX else tk.Tk()
+        if LINUX and linux_desktop.sway_socket():
+            self.root.bind('<Map>', lambda e: self.sway_window_map(e, True))
+            self.root.bind('<Unmap>', lambda e: self.sway_window_map(e, False))
         self.root.title('EarBear')
         self.root.configure(bg=BG)
         self.root.resizable(False, False)
@@ -1220,6 +1242,8 @@ class App:
             self.S = 1.0
         px = self.px
         fam = 'Segoe UI Variable Text' if 'Segoe UI Variable Text' in tkfont.families(self.root) else 'Segoe UI'
+        if LINUX:
+            fam = tkfont.nametofont('TkDefaultFont').actual('family')
         self.f_title = tkfont.Font(family=fam, size=-px(19), weight='bold')
         self.f_head = tkfont.Font(family=fam, size=-px(12), weight='bold')
         self.f_item = tkfont.Font(family=fam, size=-px(13))
@@ -1256,6 +1280,14 @@ class App:
             cv.bind('<Motion>', lambda e, w=w: self.hover(e, w))
             cv.bind('<Leave>', lambda e: self.hide_tip())
         self.root.bind('<MouseWheel>', self.on_wheel)
+        if LINUX:
+            self.root.bind('<Button-4>', self.on_wheel)
+            self.root.bind('<Button-5>', self.on_wheel)
+            if listener is not None:
+                self.root.createfilehandler(listener, tk.READABLE, self.linux_command)
+            import signal
+            signal.signal(signal.SIGTERM, lambda *_: self.cmds.put(('linux', 'quit')))
+            signal.signal(signal.SIGINT, lambda *_: self.cmds.put(('linux', 'quit')))
         self.root.bind('<space>', lambda e: self.toggle() if not self.typing() else None)
         for key, step in (('Right', 0.05), ('Left', -0.05), ('Control-Right', 0.01), ('Control-Left', -0.01), ('Shift-Right', 0.10), ('Shift-Left', -0.10)):
             self.root.bind('<%s>' % key, lambda e, st=step: self.key_volume(st))
@@ -1400,8 +1432,18 @@ class App:
             cv.create_text(cx, y, text=self.status, fill=FG, font=self.f_small, tags='vol')
 
     # ---------- background services ----------
+    def sway_window_map(self, event, mapped):
+        if event.widget is self.root:
+            self.window_mapped = mapped
+            self.window_maps += 1
+
     def start_services(self):
-        threading.Thread(target=self.watcher, daemon=True).start()
+        if LINUX:
+            self.linux_session = linux_session.start(self, LOG)
+            threading.Thread(target=self.linux_audio, daemon=True).start()
+            threading.Thread(target=linux_audio.watch_duck, args=(self, LOG), daemon=True).start()
+        else:
+            threading.Thread(target=self.watcher, daemon=True).start()
         if sys.platform == 'win32':
             threading.Thread(target=self.show_listener, daemon=True).start()
         if sys.platform == 'win32':
@@ -1414,6 +1456,46 @@ class App:
         self.set_hotkey(self.hotkey, save=False)
         if '--hidden' in sys.argv:
             self.root.after(600, self.start_hidden)
+
+    def linux_command(self, listener, _):
+        try:
+            cmd = linux_desktop.read_command(listener)
+        except BlockingIOError:
+            return
+        if cmd:
+            self.handle('linux', cmd)
+
+    def linux_audio(self):
+        self.eng = engine = Engine(linux_audio.RATE)
+        threading.Thread(target=engine.produce, daemon=True).start()
+        self.retrim()
+        self.sync()
+
+        def opened():
+            nonlocal failed
+            failed = False
+            engine.mcur = 0.0
+            engine.fifo.clear()
+            engine.chunk = None
+            engine.safe_until = time.monotonic() + 6
+            self.dev_name = 'PulseAudio'
+            self.audio_ready = True
+            LOG.info('audio opened: PulseAudio @ %d Hz' % engine.fs)
+            if self.launch == 'toggle':
+                self.launch = 'show'
+                self.cmds.put(('linux', 'play'))
+
+        failed = False
+        while self.alive:
+            try:
+                linux_audio.play(engine, lambda: self.alive, opened)
+            except OSError as exc:
+                self.audio_ready = False
+                if not failed:
+                    LOG.write('ERROR', 'PulseAudio unavailable: %s' % exc)
+                    self.cmds.put(('audio_error', str(exc)))
+                failed = True
+                time.sleep(1)
 
     def show_listener(self):
         """Wait for the launcher of a second instance to ask this one to show its window."""
@@ -1503,16 +1585,7 @@ class App:
         failures = 0
         while self.alive:
             try:
-                if self.duck and self.playing:
-                    now = time.monotonic()
-                    if other_audio_peak(os.getpid()) > 0.01:
-                        self.duck_since = self.duck_since or now
-                        self.duck_last = now
-                    elif not self.duck_media or now - self.duck_last >= 4.0:   # a blip, or four seconds of silence
-                        self.duck_since = 0.0
-                    self.duck_media = bool(self.duck_since) and now - self.duck_since >= 0.9   # ignore blips under a second
-                else:
-                    self.duck_media, self.duck_since = False, 0.0
+                self.update_duck(self.duck and self.playing and other_audio_peak(os.getpid()) > 0.01)
                 failures = 0
             except Exception as ex:
                 failures += 1
@@ -1522,6 +1595,18 @@ class App:
                     LOG.write('ERROR', 'audio ducking disabled: %s' % ex)
                     return
             time.sleep(0.5)
+
+    def update_duck(self, active):
+        if not self.duck or not self.playing:
+            self.duck_media, self.duck_since = False, 0.0
+            return
+        now = time.monotonic()
+        if active:
+            self.duck_since = self.duck_since or now
+            self.duck_last = now
+        elif not self.duck_media or now - self.duck_last >= 4.0:
+            self.duck_since = 0.0
+        self.duck_media = bool(self.duck_since) and now - self.duck_since >= 0.9
 
     def apply_topmost(self):
         try:
@@ -1588,6 +1673,16 @@ class App:
         self.hotkey, self.dirty = key, True
         if save:
             self.save()
+        if LINUX:
+            if self.x11_hotkey:
+                self.x11_hotkey.close()
+                self.x11_hotkey = None
+            if key and linux_desktop.x11_session():
+                try:
+                    self.x11_hotkey = linux_desktop.Hotkey(self.root, key, self.toggle)
+                except Exception as exc:
+                    self.say('Global shortcut unavailable: %s' % exc, 6, 'warn')
+            return
         if sys.platform != 'win32':
             return
         if self.hk_tid:                                  # end the previous registration first
@@ -1661,14 +1756,19 @@ class App:
             self.hook_on, self.hook_tid = False, None
 
     def tray_on(self):
-        if self.tray or sys.platform != 'win32':
+        if self.tray or not (LINUX or sys.platform == 'win32'):
             return
         try:
-            import ctypes
+            if LINUX:
+                if not linux_desktop.tray_available():
+                    raise RuntimeError('no StatusNotifier tray is running')
+                self.tray = linux_desktop.Tray(self.root, base64.b64decode(ICONS[64]),
+                                               lambda cmd: self.cmds.put(('tray', cmd)))
+                return
             import pystray
-            from pystray import _win32
             from PIL import Image
             app = self
+            from pystray import _win32
 
             class TrayIcon(_win32.Icon):
                 def _assert_icon_handle(self):
@@ -1717,6 +1817,8 @@ class App:
             pass
 
     def tray_refresh(self):
+        if LINUX:
+            return  # The Linux menu has a single Play/Pause action.
         try:
             if self.tray:
                 self.tray.update_menu()
@@ -1748,7 +1850,16 @@ class App:
         return p if os.path.exists(p) else None
 
     def autostart_sync(self):
-        """Read the Windows start-up entry; refresh its path if the folder was moved."""
+        """Read the start-up entry and refresh its path if the folder was moved."""
+        if LINUX:
+            path = linux_desktop.autostart_path()
+            if not path.is_file():
+                return False
+            try:
+                linux_desktop.write_autostart(path)
+            except (OSError, UnicodeError):
+                LOG.exc('autostart')
+            return True
         if sys.platform != 'win32':
             return False
         try:
@@ -1764,6 +1875,18 @@ class App:
             return False
 
     def set_autostart(self, v):
+        if LINUX:
+            try:
+                path = linux_desktop.autostart_path()
+                if v:
+                    linux_desktop.write_autostart(path)
+                else:
+                    path.unlink(missing_ok=True)
+                self.autostart = v
+            except OSError as exc:
+                self.say('Cannot change start-up entry: %s' % exc, 8, 'error')
+            self.dirty = True
+            return
         if sys.platform != 'win32':
             self.say('Start with Windows is only available on Windows', 4, 'warn')
             return
@@ -1807,7 +1930,7 @@ class App:
             pass
 
     def start_hidden(self):
-        if self.tray:
+        if self.tray and (not LINUX or self.tray.visible and linux_desktop.tray_available()):
             self.hidden = True
             self.root.withdraw()
         else:
@@ -1821,10 +1944,11 @@ class App:
         self.dirty = True
 
     def on_close(self):
-        if self.tray_pref and self.tray and getattr(self.tray, 'visible', False):
+        if (self.tray_pref and self.tray and getattr(self.tray, 'visible', False) and
+                (not LINUX or linux_desktop.tray_available())):
             self.hidden = True
             self.root.withdraw()
-            if not getattr(self, '_told', False):
+            if not LINUX and not getattr(self, '_told', False):
                 self._told = True
                 try:
                     self.tray.notify('EarBear keeps running in the tray. Right-click the icon to quit.', 'EarBear')
@@ -1844,7 +1968,7 @@ class App:
 
     # ---------- actions ----------
     def set_play(self, v):
-        if v and not self.eng:
+        if v and (not self.eng or LINUX and not self.audio_ready):
             self.say('Audio is starting...')
             return
         if v != self.playing:
@@ -2377,12 +2501,19 @@ class App:
     # ---------- external commands (tray, media keys, headset) ----------
     def handle(self, src, cmd):
         now = time.monotonic()
-        if src in ('key', 'smtc'):
+        if src == 'audio_error':
+            self.say('Audio unavailable: %s' % cmd, 8, 'error')
+        elif src == 'mpris_volume':
+            if self.media and math.isfinite(cmd):
+                self.set_vol(cmd)
+        elif src == 'mpris' and not self.media:
+            return
+        elif src in ('key', 'smtc'):
             if not self.media or now - self.last_media < 0.4:   # both channels may report the same event
                 return
             self.last_media = now
             self.set_play(not self.playing if cmd == 'toggle' else cmd == 'play')
-        elif src == 'hotkey':
+        elif cmd == 'toggle':
             self.set_play(not self.playing)
         elif cmd == 'show':
             self.show()
@@ -2680,10 +2811,11 @@ class App:
 
     def on_wheel(self, e):
         w = self.root.winfo_containing(e.x_root, e.y_root)
+        delta = 120 if e.num == 4 else -120 if e.num == 5 else e.delta
         if w is self.pc:
-            self.scroll_by(-self.px(40) * e.delta / 120.0)
+            self.scroll_by(-self.px(40) * delta / 120.0)
         elif w is self.c and self.page == 'main':
-            self.set_vol(self.vol + (0.03 if e.delta > 0 else -0.03))
+            self.set_vol(self.vol + (0.03 if delta > 0 else -0.03))
 
     def scroll_by(self, dy):
         """Wheel scrolling of the side panel: a slightly under-damped spring pulls the view to a target position, so it
@@ -3097,7 +3229,7 @@ class App:
 
     def sec_set_window(self, y):
         onoff = [('Off', False), ('On', True)]
-        y = self.row(y, 'start with Windows', onoff, self.autostart, self.set_autostart)
+        y = self.row(y, 'start at login' if LINUX else 'start with Windows', onoff, self.autostart, self.set_autostart)
         y = self.row(y, 'close to tray', onoff, self.tray_pref, self.set_tray)
         return self.row(y, 'always on top', [('Off', 0), ('On', 1), ('Compact', 2)], self.topmost, self.set_topmost)
 
@@ -3108,6 +3240,12 @@ class App:
         y = self.row(y, 'volume down for videos and music', onoff, self.duck, lambda v: self.set_attr('duck', v))
         y = self.row(y, 'keep awake', [('Off', 0), ('System', 1), ('Screen', 2)], self.keep_awake, lambda v: self.set_attr('keep_awake', v))
         y = self.row(y, 'sleep fade-out', onoff, self.wind_on, lambda v: self.set_attr('wind_on', v))
+        if LINUX and linux_desktop.wayland_session():
+            shortcut = ('Sway: bind Ctrl+Alt+N to EarBear --toggle' if linux_desktop.sway_socket()
+                        else 'Wayland: bind EarBear --toggle in your desktop')
+            self.c.create_text(self.bx, y + self.px(8), text=shortcut,
+                               fill=DIM, font=self.f_small, anchor='w')
+            return y + self.px(24)
         return self.row(y, 'play/pause Ctrl+Alt+', [('Off', ''), ('N', 'N'), ('P', 'P'), ('Space', 'SPACE')], self.hotkey, self.set_hotkey)
 
     def sec_set_export(self, y):
@@ -3467,6 +3605,11 @@ class App:
         t.start()
         self.flush_config()
         self.alive = False
+        if self.x11_hotkey:
+            try:
+                self.x11_hotkey.close()
+            except OSError:
+                pass
         LOG.info('shutting down')
         try:
             if self.eng:
@@ -3484,6 +3627,8 @@ class App:
                 self.smtc.wait(1.5)
         except Exception:
             pass
+        if self.linux_session:
+            self.linux_session.join(1.0)
         try:
             self.root.destroy()
         except Exception:
@@ -3525,6 +3670,33 @@ def hard_exit():
 
 
 def main():
+    if LINUX:
+        import argparse
+        parser = argparse.ArgumentParser(prog='EarBear', description='Offline ambient noise generator')
+        actions = parser.add_mutually_exclusive_group()
+        actions.add_argument('--hidden', action='store_true', help='start minimized or in the tray')
+        actions.add_argument('--toggle', action='store_true', help='toggle playback (launch and play if closed)')
+        actions.add_argument('--quit', action='store_true', help=argparse.SUPPRESS)
+        args = parser.parse_args()
+        launch = 'toggle' if args.toggle else 'quit' if args.quit else 'show'
+        try:
+            listener = linux_desktop.activate(data_dir(), launch)
+        except OSError as exc:
+            print('EarBear: %s' % exc, file=sys.stderr)
+            return 1
+        if listener is None:
+            return
+        with listener:
+            if linux_desktop.wayland_session() and not os.environ.get('DISPLAY'):
+                print('EarBear: Tk needs XWayland to open its window. Enable XWayland in your compositor.', file=sys.stderr)
+                return 1
+            try:
+                App(listener, launch)
+            except Exception:
+                LOG.exc('fatal')
+                traceback.print_exc()
+                return 1
+        return
     if sys.platform == 'win32':
         try:
             import ctypes
@@ -3549,4 +3721,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

@@ -1,5 +1,22 @@
 # Building the portable version
 
+## Linux
+
+From the source checkout on a glibc-based x86-64 Linux build host, run:
+
+```sh
+/usr/bin/python3 tools/build_linux.py
+```
+
+The build host needs Python 3.12 or newer with Tk and PyGObject, GTK 3 and Ayatana AppIndicator
+with their typelibs, the GNOME desktop schemas, the PulseAudio client libraries, `gdbus`, `swaymsg`,
+`glib-compile-schemas`, and `uv`. The script copies the runtime and its shared libraries from the
+host and installs the Python packages into the staged folder. It writes
+`dist/EarBear-<version>-linux-x86_64-portable.zip`. The target system supplies glibc and the running
+desktop and audio services. It does not need the build tools or a separately installed Python.
+
+## Windows
+
 The portable folder has this layout:
 
 ```

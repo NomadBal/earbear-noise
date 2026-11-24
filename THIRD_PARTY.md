@@ -16,7 +16,13 @@ each under its own license.
 | lameenc (LAME) | MP3 export | LGPL-3.0-or-later |
 | Microsoft Visual C++ runtime | Required by Python and NumPy | Microsoft redistributable terms |
 
-numpy's OpenBLAS library is not shipped: it is replaced by minblas (`minblas/`), part of this project.
+In the Windows bundle, numpy's OpenBLAS library is replaced by minblas (`minblas/`), part of this project.
 
 The license files shipped inside each package stay in the bundle next to the component. LGPL components are used
 unmodified as separate libraries.
+
+The Linux bundle includes CPython with Tcl/Tk, NumPy with OpenBLAS, Pillow, lameenc, pulsectl,
+dbus-next, and python-xlib. It includes the build host's PulseAudio client libraries, GTK 3,
+PyGObject, Ayatana AppIndicator, `gdbus`, `swaymsg`, and their runtime dependencies. Python package
+notices are kept with the packages. On RPM build hosts, `licenses/host/` contains the host package
+notices and a list of the binary and source RPM versions.
