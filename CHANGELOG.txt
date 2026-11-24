@@ -1,0 +1,249 @@
+EARBEAR - CHANGELOG
+===================
+
+0.14.2.0  (2026-11-24)
+----------------------
+Changed
+- Error messages stay on screen until clicked.
+- Interface: changed behavior.
+
+0.14.1.0  (2026-11-24)
+----------------------
+Changed
+- Interface: optimized and changed behavior.
+
+0.14.0.1  (2026-11-24)
+----------------------
+Fixed
+- EarBear did not start since 0.13.0.0: it used a standard-library module (colorsys) that the portable bundle does not include.
+- A missing module now shows an error message at start instead of closing silently.
+
+0.14.0.0  (2026-11-24)
+----------------------
+Added
+- Sleep fade-out (Settings > Audio, off by default): for timers longer than 30 minutes, the volume fades evenly to silence over the last 20% of the time.
+- Global play/pause hotkey: Ctrl+Alt+N by default, also Ctrl+Alt+P or Ctrl+Alt+Space, or off. A combination already taken by another program is left alone and reported.
+
+0.13.2.0  (2026-11-24)
+----------------------
+Changed
+- Sleep timer, chimes and every other duration use Windows' uptime clock: a change of the system time no longer moves them; time spent with the computer asleep counts.
+- Preset names are limited to 16 characters; the button to add a preset is hidden while 10 user presets exist.
+Fixed
+- Clicking a user preset in the instant after deleting it raised an error.
+
+0.13.1.0  (2026-11-24)
+----------------------
+Changed
+- Settings are written to disk at most once a minute and when the program closes, instead of after every change; the file is replaced in one step, so it is never left half written.
+- Up to 10 user presets.
+Fixed
+- Memory use no longer grows while panel sections open and close (about 100 MB instead of up to several hundred).
+- An output device change while a block was being computed could drop that block with an error.
+- A second export can no longer start while one is running (both wrote to the same file).
+
+0.13.0.0  (2026-11-24)
+----------------------
+Changed
+- Renamed from Noise to EarBear: EarBear.exe, settings in %LOCALAPPDATA%\EarBear, start-with-Windows entry "EarBear". Settings of Noise are not carried over.
+- Interface: changed behavior.
+
+0.12.3.1  (2026-11-24)
+----------------------
+Fixed
+- Rhythm sounds are built with running sums instead of direct convolutions: changing a rhythm setting at 192/384 kHz output stalled the audio for seconds, now it takes milliseconds (same sound).
+- The audio queue holds a quarter of a second at every sample rate (it was six blocks, only 32 ms at 384 kHz).
+- A damaged or hand-edited config.json can no longer stop Noise from starting or bring values outside their controls' range (negative volume, oversized exports, impossible layer settings); invalid entries fall back to defaults.
+- An error in the interface no longer stops the periodic update: the sleep timer, volume changes and chimes keep working.
+- A persistent audio error is logged once a minute instead of ten times a second, and the log never grows past 1 MB.
+
+0.12.3.0  (2026-11-24)
+----------------------
+Added
+- Output safety stage (live and export): a block containing invalid values is muted, and the output is never more than 8 dB louder than the level set by the volume. Presets and scenes are not affected; extreme rhythm settings (which could reach full scale even at low volume) are held down.
+Fixed
+- Export: binaural, swell and rhythm layers now have the same level as during live playback (they were scaled by the loudness trim).
+
+0.12.2.0  (2026-11-24)
+----------------------
+Changed
+- Volume ducking reacts only to browsers and media players (videos, music); games and other programs no longer lower the noise.
+- Ducking starts after one second of sound and ends after four seconds of silence, so short or intermittent sounds do not make the volume swing.
+
+0.12.1.0  (2026-11-24)
+----------------------
+Changed
+- numpy's OpenBLAS library (20 MB) replaced by minblas, a small substitute that provides only the functions numpy needs at runtime; sound output is unchanged. numpy.linalg is no longer available.
+- Launcher rebuilt from its now published source; a folder path too long to start from is reported with a message.
+
+0.12.0.0  (2026-11-23)
+----------------------
+Changed
+- Interface: optimized.
+- Audio producer thread wakes half as often (20 ms while the queue is full, 80 ms while silent and paused); same buffer, no underruns.
+Removed
+- Unused code and unused numpy parts: polynomial, ma, ctypeslib, doc, matlib, test extension modules and all .lib import libraries (about 3.3 MB).
+
+0.11.3.0  (2026-11-23)
+----------------------
+Changed
+- Interface: changed behavior.
+
+0.11.2.0  (2026-11-23)
+----------------------
+Changed
+- Interface: changed behavior.
+
+0.11.1.2  (2026-11-23)
+----------------------
+Changed
+- Sleep timer and time cues accept 1 to 720 minutes (was 5 to 720).
+
+0.11.1.1  (2026-11-23)
+----------------------
+Changed
+- Interface: changed behavior.
+
+0.11.1.0  (2026-11-23)
+----------------------
+Added
+- Sleep timer and time cues accept a typed time (1:30, 1:30:00, 90, 90m, 2h, 1.5h, 1h30, 1h 30m).
+Changed
+- Fireplace scene: crackle level -9 dB -> -6 dB.
+
+0.11.0.1  (2026-11-23)
+----------------------
+Changed
+- The slow rise above the protection threshold (about 6 s to 90%) now applies to every volume increase during playback, not only to a start from silence.
+- A preset change glides: band gains follow their new targets over about 1.5 s instead of jumping.
+Fixed
+- Rain scene drops were far too loud after the 0.10.0.0 normalisation; now 2400 Hz, 16 ms decay, -25 dB (peaks about 11 dB under the noise RMS).
+
+0.11.0.0  (2026-11-23)
+----------------------
+Added
+- Slow fade-in (about 12 s) above the protection threshold when starting from silence.
+- Ctrl+Q quits.
+Changed
+- Train scene rebuilt: four hits per cycle on a 26-step grid, 46 cycles/min, 64 Hz tone, 42 ms decay, -6 dB, spectrum cut above 500 Hz, slow swell.
+- Train uses two dedicated wheel-thump kernels (rising and falling pitch glide, 2nd and 3rd harmonic, 300 Hz knock, faint 1 kHz rattle) instead of the generic wave.
+
+0.10.0.0  (2026-11-23)
+----------------------
+Added
+- low_boost(f): restores 30% of the A-weighting loss (max +8 dB) for the rhythm tone and the binaural carrier, so low thumps and tones are not lost under the hiss.
+Changed
+- Layer loudness is now relative to the noise as heard: rhythm and binaural gains are divided by the preset loudness trim (they were up to about 9 times too quiet on White). Base gains: rhythm 1.4 -> 2.4, binaural 1 -> 2.0. Train and Heartbeat levels lowered to -10 and -8 dB.
+- Interface: changed behavior.
+Fixed
+- Rhythm layer crashed on low tones (Heartbeat): the crackle smoothing kernel was longer than the tick, which silenced the engine.
+
+0.9.1  (2026-11-23)
+-------------------
+Added
+- Quit action that works while "close to tray" is on.
+Changed
+- Interface: changed behavior.
+
+0.9.0  (2026-11-23)
+-------------------
+Changed
+- Interface: changed behavior.
+
+0.8.1  (2026-11-23)
+-------------------
+Added
+- "Always on top" third value: Mini player.
+
+0.8.0  (2026-11-23)
+-------------------
+Added
+- Ducking: the volume halves while other programs play audio (Core Audio peak meters of the other sessions, 0.5 s polling, 2.5 s hold, switch in Settings).
+- Chime ducking: the noise halves while a chime plays; the chime itself is not lowered.
+- Four chime sounds, louder relative to the noise.
+- Always on top.
+- Sleep timer duration is saved and started separately.
+Changed
+- The chime is mixed after the volume ramps instead of inside the noise synthesis.
+
+0.7.1  (2026-11-23)
+-------------------
+Changed
+- Interface: changed behavior.
+
+0.7.0  (2026-11-23)
+-------------------
+Added
+- Crackle rhythm pattern: Poisson pops, six pre-rendered noise ticks, squared-uniform amplitude, random pan, 20% followed by 1-3 weaker pops.
+- Fireplace scene (low spectrum, slow swell, Crackle 9 pops/s, 2.2 kHz, 9 ms).
+- MP3 export (lameenc, 192 kbit/s, 44.1 kHz stereo); WAV stays available.
+- Keyboard shortcuts for play and volume.
+Changed
+- The arrow controls lower or raise every band by 5 dB instead of shifting the spectrum; a band that is off stays off.
+Fixed
+- The arrow controls could never bring the bands to the floor.
+
+0.6.1  (2026-11-23)
+-------------------
+Fixed
+- Tray icon never appeared (the trimmed Pillow has no ICO plugin); the icon is now built directly from the pixels.
+- "Close to tray" hides the window only if the tray icon is really visible.
+- Quit could leave the process alive; it now ends with a watchdog and TerminateProcess.
+
+0.6.0  (2026-11-23)
+-------------------
+Added
+- Presets reset the whole state (binaural, waves, rhythm, motion, stereo width, pitch drift) before applying their values; presets saved with "+" store the motion settings and stereo width too.
+- Noise-stop-all.bat stops every process running from the program folder.
+Fixed
+- The media-session helper could outlive the program and keep the folder locked; it now exits with its parent.
+
+0.5.0  (2026-11-22)
+-------------------
+Added
+- Time cues (engine chime layer; the enabled flag is never saved, so it is off at every launch).
+- Settings: start with Windows, close to tray, fade in/out, media keys, keep awake, export length.
+Changed
+- The changelog in the About page is read only when the page is opened.
+
+0.4.0  (2026-11-22)
+-------------------
+Added
+- Single instance (mutex created by Noise.exe, a second launch restores the running window).
+- Binaural, Waves and Rhythm layers (patterns Single, Double, Train, Heartbeat and Poisson Drops).
+- Scene presets: Sea, Rain, Train, Airplane, Heartbeat.
+- Focus band control replaces the eight fixed single-band presets.
+- Log file with optional debug level.
+Fixed
+- A pinned taskbar button could create a second taskbar group.
+
+0.3.2  (2026-11)
+----------------
+Changed
+- Bundle trimmed from about 112 MB to about 70 MB: unused standard library modules, OpenSSL, SQLite, tests, Pillow plugins, pystray back ends, Tcl time zone data, dist-info folders.
+Fixed
+- Turning "media keys" off removes the global keyboard hook and closes the media-session helper.
+
+0.3.1  (2026-11)
+----------------
+Added
+- Keep awake while playing; start with Windows (starts hidden).
+
+0.3.0  (2026-11)
+----------------
+Added
+- Close to tray with menu; audio output follows the Windows default playback device; media keys and headset play/pause; user presets, preset rotation.
+
+0.2.0  (2026-11)
+----------------
+Changed
+- Engine rewritten with NumPy only (SciPy removed): faster start-up, smaller bundle.
+- Audio is generated by a producer thread into a short FIFO; the audio callback only copies samples.
+Added
+- Presets and last state restored at launch; volume safety (start cap, slow fade-in, warning above 75%).
+Fixed
+- Clicks and a high-frequency artefact in low presets, caused by computing audio inside the audio callback.
+
+0.1.0  (2026-11)
+----------------
+- First portable release: ten-band noise generator (random-phase spectral synthesis, overlap-add), presets, stereo width, pitch drift, motion, sleep timer, WAV export.
