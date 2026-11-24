@@ -5,6 +5,8 @@
 A small, fully offline ambient noise generator for Linux and Windows. It synthesises noise in real time (nothing is streamed or
 downloaded), so it keeps working with no internet connection and uses very little CPU.
 
+EarBear ships as a portable folder: no installer, no admin rights, no registry entries unless you turn on "start with Windows".
+
 ## Features
 
 - Ten-band noise engine (random-phase spectral synthesis) with one slider per band and a stereo width control
@@ -16,28 +18,18 @@ downloaded), so it keeps working with no internet connection and uses very littl
 - Tray icon, media keys / headset play-pause, global play/pause shortcut, single instance, always on top or compact view, follows the default audio device
 - Keyboard: Space play/pause, Left/Right volume, Up/Down all bands (Ctrl for fine steps, Shift for large steps), Ctrl+Q quit
 
-## Run on Linux
+## Linux portable version
 
-Use Python 3.12 or newer with Tk and a running PulseAudio or PipeWire-Pulse desktop session. On Debian/Ubuntu:
-
-```sh
-sudo apt install python3-venv python3-tk libpulse0
-```
-
-From the EarBear checkout:
-
-```sh
-python3 -m venv --system-site-packages python
-python/bin/python -m pip install -r requirements.txt
-./EarBear
-```
+Download `EarBear-<version>-linux-x86_64-portable.zip`, unpack the entire folder, and run `./EarBear` inside it.
+Python and the application dependencies are included. EarBear uses your existing desktop and PulseAudio or
+PipeWire-Pulse session. See [the build guide](docs/BUILDING.md#linux) to build the ZIP from source.
 
 Run `./EarBear-debug.sh` to see startup errors in the terminal. To remove EarBear, turn off **start at login**
 in Settings → Window if enabled, run `./EarBear-stop-all.sh`, then delete the folder.
 Settings live in `${XDG_CONFIG_HOME:-~/.config}/earbear`; the log lives in `${XDG_STATE_HOME:-~/.local/state}/earbear`.
 
 - On X11, Ctrl+Alt+N toggles playback by default. On Wayland, the Tk window requires XWayland. Set the global shortcut in your compositor using the absolute path to `EarBear`. On Sway, add `bindsym --no-repeat Ctrl+Alt+n exec "/path/to/EarBear" --toggle` to your Sway config. Media controls use MPRIS on both.
-- **Close to tray** requires a StatusNotifier/AppIndicator tray and GTK 3 introspection. On Debian/Ubuntu install `python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3 libglib2.0-bin`. Without a tray, closing the window quits; `--hidden` starts minimized.
+- **Close to tray** requires a desktop with a StatusNotifier/AppIndicator tray. Without a tray, closing the window quits; `--hidden` starts minimized.
 - **Keep awake** uses logind for system sleep. For display idle it uses Sway's idle inhibitor while the window is mapped, or the desktop's ScreenSaver D-Bus service on other desktops. Without those services or permissions, playback still works.
 
 ## Windows portable version
