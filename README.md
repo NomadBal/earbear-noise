@@ -1,5 +1,7 @@
 # EarBear
 
+<img src="docs/assets/earbear-mascot.png" alt="EarBear, a charcoal bear wearing headphones and holding an orange audio mixer" width="200">
+
 A small, fully offline ambient noise generator for Windows. It synthesises noise in real time (nothing is streamed or
 downloaded), so it keeps working with no internet connection and uses very little CPU.
 
